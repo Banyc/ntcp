@@ -26,9 +26,9 @@ TCP but with a bunch of sockets and a smart scheduler.
 - goal: minimize $l$
 - the default weight vector $w$:
   ```math
-  w = \left (\frac{1}{n}, \dots, \frac{1}{n} \right)
+  w = \left( \frac{1}{n}, \dots, \frac{1}{n} \right)
   ```
 - the next weight vector $w' \in \mathbb{R}^n$:
   ```math
-  w' = \left (\arg\min_{w \in \mathbb{R}^n, \|w\| = 1} l(\hat{r}, w) \right) \cdot \alpha + w \cdot (1 - \alpha)
+  w' = \left( \arg\min_{w \in \mathbb{R}^n, \|w\| = 1} l(\hat{r}, w) \right) \cdot \alpha + w \cdot (1 - \alpha)
   ```
