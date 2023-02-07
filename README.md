@@ -14,15 +14,21 @@ TCP but with a bunch of sockets and a smart scheduler.
 
 - say:
   - RTT of a TCP connection inversely represents the quality of the connection
-  - $r_i$: the RTT of the $i$-th connection
-  - $w_i$: the weight of the $i$-th connection
   - there are $n$ connections
+  - $r_i$: the RTT of the $i$-th connection
+  - $r \in \mathbb{R}^n$: the RTT vector
+  - $w_i$: the weight of the $i$-th connection
+  - $w \in \mathbb{R}^n$: the weight vector
   - $l : \mathbb{R}^n \times \mathbb{R}^n \to \mathbb{R}$: the loss function
   - $l(r, w) = r \cdot w$
   - $w' \in \mathbb{R}^n$: the next weight vector
   - $\alpha \in \mathbb{R}$: the learning rate
 - goal: minimize $l$
+- the default weight vector $w$:
+  ```math
+  w = \left (\frac{1}{n}, \dots, \frac{1}{n} \right)
+  ```
 - the next weight vector $w' \in \mathbb{R}^n$:
   ```math
-  w' = \left (\arg\min_{w \in \mathbb{R}^n} l(r, w) \right) \cdot \alpha + w \cdot (1 - \alpha)
+  w' = \left (\arg\min_{w \in \mathbb{R}^n, \|w\| = 1} l(\hat{r}, w) \right) \cdot \alpha + w \cdot (1 - \alpha)
   ```
