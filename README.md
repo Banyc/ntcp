@@ -30,5 +30,5 @@ TCP but with a bunch of sockets and a smart scheduler.
   ```
 - the next weight vector $w' \in \mathbb{R}^n$:
   ```math
-  w' = \left( \arg\min_{w \in \mathbb{R}^n, \|w\| = 1} l(\hat{r}, w) \right) \cdot \alpha + w \cdot (1 - \alpha)
+  w' = \frac{w - \alpha \nabla l(\hat{r}, w)}{\| w - \alpha \nabla l(\hat{r}, w) \|}
   ```
