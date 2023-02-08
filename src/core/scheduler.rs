@@ -79,7 +79,7 @@ fn standardize(vector: &HashMap<RawFd, f64>) -> Result<HashMap<RawFd, f64>, Stan
         return Err(StandardizeError::TooFewSamples);
     }
     let mut standardized_vector = HashMap::new();
-    let mean: f64 = vector.values().sum::<f64>() / (vector.len() - 1) as f64;
+    let mean: f64 = vector.values().sum::<f64>() / vector.len() as f64;
     let mut sum_of_squares = 0.0;
     for weight in vector.values() {
         sum_of_squares += (weight - mean).powi(2);
@@ -87,7 +87,7 @@ fn standardize(vector: &HashMap<RawFd, f64>) -> Result<HashMap<RawFd, f64>, Stan
     if sum_of_squares == 0.0 {
         return Err(StandardizeError::ZeroStdDev);
     }
-    let std_dev = (sum_of_squares / vector.len() as f64).sqrt();
+    let std_dev = (sum_of_squares / (vector.len() - 1) as f64).sqrt();
     for (fd, weight) in vector {
         standardized_vector.insert(*fd, (*weight - mean) / std_dev);
     }
