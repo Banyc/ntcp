@@ -28,6 +28,7 @@ TCP but with a bunch of sockets and a smart scheduler.
   - $l(r, w) = N(\frac{r}{\| r \|_1}) \cdot w$
   - $w' \in \mathbb{R}^n$: the next weight vector
   - $\alpha \in \mathbb{R}$: the learning rate
+    - $a \in (10^{-6}, 1)$
 - goal: minimize $l$
 - the default weight vector $w$:
   ```math
