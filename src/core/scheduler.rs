@@ -23,16 +23,41 @@ impl Scheduler {
         }
     }
 
+    /// Do not include RTTs that are either infinite, NaN, or time out.
     pub fn update(&mut self, rtt_vector: &HashMap<RawFd, f64>) {
-        // Update weight vector
+        // Scale RTTs to [0, 1]
+        // To make `next_weight` less likely to be negative
         let normalized_rtt_vector = normalize(rtt_vector);
-        for (fd, weight) in self.weight_vector.iter_mut() {
-            *weight -= self.learning_rate * normalized_rtt_vector[fd];
-            if *weight < 0.0 {
-                *weight = 0.0;
-            }
+
+        // To remove dead fds from the next weight vector
+        let mut next_weight_vector = HashMap::new();
+
+        // Update weight vector
+        for (fd, rtt) in normalized_rtt_vector.iter() {
+            let next_weight = match self.weight_vector.get(fd) {
+                Some(weight) => {
+                    // Gradually decrease weight
+                    let mut next_weight = *weight - self.learning_rate * rtt;
+
+                    // Prevent negative weight
+                    if next_weight < 0.0 {
+                        next_weight = 0.0;
+                    }
+                    next_weight
+                }
+                None => {
+                    // This is a new fd
+                    0.0
+                }
+            };
+            next_weight_vector.insert(*fd, next_weight);
         }
-        normalize_mut(&mut self.weight_vector);
+
+        // Normalize weight vector
+        normalize_mut(&mut next_weight_vector);
+
+        // Store weight vector
+        self.weight_vector = next_weight_vector;
     }
 }
 
