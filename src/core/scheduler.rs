@@ -25,31 +25,30 @@ impl Scheduler {
 
     /// Do not include RTTs that are either infinite, NaN, or time out.
     pub fn update(&mut self, rtt_vector: &HashMap<RawFd, f64>) {
-        // Scale RTTs to [0, 1]
-        // To make `next_weight` less likely to be negative
-        let normalized_rtt_vector = normalize(rtt_vector);
+        // Scale RTTs to [0, 1] then standardize them to N(0, 1)
+        let clean_rtt_vector = &standardize(&normalize(rtt_vector));
 
         // To remove dead fds from the next weight vector
         let mut next_weight_vector = HashMap::new();
 
         // Update weight vector
-        for (fd, rtt) in normalized_rtt_vector.iter() {
-            let next_weight = match self.weight_vector.get(fd) {
-                Some(weight) => {
-                    // Gradually decrease weight
-                    let mut next_weight = *weight - self.learning_rate * rtt;
-
-                    // Prevent negative weight
-                    if next_weight < 0.0 {
-                        next_weight = 0.0;
-                    }
-                    next_weight
-                }
+        for (fd, rtt) in clean_rtt_vector.iter() {
+            let weight = match self.weight_vector.get(fd) {
+                Some(weight) => *weight,
                 None => {
                     // This is a new fd
                     0.0
                 }
             };
+            // Gradually decrease weight
+            let mut next_weight = weight - self.learning_rate * rtt;
+
+            // Prevent negative weight
+            if next_weight < 0.0 {
+                next_weight = 0.0;
+            }
+
+            // Store next weight
             next_weight_vector.insert(*fd, next_weight);
         }
 
@@ -71,6 +70,21 @@ fn normalize(vector: &HashMap<RawFd, f64>) -> HashMap<RawFd, f64> {
     normalized_vector
 }
 
+#[must_use]
+fn standardize(vector: &HashMap<RawFd, f64>) -> HashMap<RawFd, f64> {
+    let mut standardized_vector = HashMap::new();
+    let mean: f64 = vector.values().sum::<f64>() / vector.len() as f64;
+    let mut sum_of_squares = 0.0;
+    for weight in vector.values() {
+        sum_of_squares += (weight - mean).powi(2);
+    }
+    let std_dev = (sum_of_squares / vector.len() as f64).sqrt();
+    for (fd, weight) in vector {
+        standardized_vector.insert(*fd, (*weight - mean) / std_dev);
+    }
+    standardized_vector
+}
+
 fn normalize_mut(vector: &mut HashMap<RawFd, f64>) {
     let sum: f64 = vector.values().sum();
     for weight in vector.values_mut() {
@@ -85,9 +99,11 @@ mod tests {
     fn ok() {
         let mut scheduler = Scheduler::new(vec![0, 1, 2].into_iter(), 0.1);
         assert_eq!(scheduler.weight_vector.len(), 3);
-        assert_eq!(scheduler.weight_vector[&0], 0.3333333333333333);
-        assert_eq!(scheduler.weight_vector[&1], 0.3333333333333333);
-        assert_eq!(scheduler.weight_vector[&2], 0.3333333333333333);
+        assert_eq!(scheduler.weight_vector[&0], 1.0 / 3.0);
+        assert_eq!(scheduler.weight_vector[&1], 1.0 / 3.0);
+        assert_eq!(scheduler.weight_vector[&2], 1.0 / 3.0);
+
+        let prev_weight_vector = scheduler.weight_vector.clone();
 
         // Update weight vector
         scheduler.update(
@@ -96,12 +112,12 @@ mod tests {
                 .collect(),
         );
         assert_eq!(scheduler.weight_vector.len(), 3);
-        assert!(scheduler.weight_vector[&0] < 0.352);
-        assert!(scheduler.weight_vector[&0] > 0.351);
-        assert!(scheduler.weight_vector[&1] < 0.334);
-        assert!(scheduler.weight_vector[&1] > 0.333);
-        assert!(scheduler.weight_vector[&2] < 0.315);
-        assert!(scheduler.weight_vector[&2] > 0.314);
+        println!("1st: {:?}", scheduler.weight_vector);
+        assert!(scheduler.weight_vector[&0] > prev_weight_vector[&0]);
+        assert!(f64::abs(scheduler.weight_vector[&1] - prev_weight_vector[&1]) < 0.001);
+        assert!(scheduler.weight_vector[&2] < prev_weight_vector[&2]);
+
+        let prev_weight_vector = scheduler.weight_vector.clone();
 
         // Update weight vector
         scheduler.update(
@@ -110,12 +126,12 @@ mod tests {
                 .collect(),
         );
         assert_eq!(scheduler.weight_vector.len(), 3);
-        assert!(scheduler.weight_vector[&0] < 0.373);
-        assert!(scheduler.weight_vector[&0] > 0.372);
-        assert!(scheduler.weight_vector[&1] < 0.334);
-        assert!(scheduler.weight_vector[&1] > 0.333);
-        assert!(scheduler.weight_vector[&2] < 0.295);
-        assert!(scheduler.weight_vector[&2] > 0.294);
+        println!("2nd: {:?}", scheduler.weight_vector);
+        assert!(scheduler.weight_vector[&0] > prev_weight_vector[&0]);
+        assert!(f64::abs(scheduler.weight_vector[&1] - prev_weight_vector[&1]) < 0.001);
+        assert!(scheduler.weight_vector[&2] < prev_weight_vector[&2]);
+
+        let _prev_weight_vector = scheduler.weight_vector.clone();
 
         // Converge final weight vector
         for _ in 0..100 {
@@ -126,8 +142,23 @@ mod tests {
             );
         }
         assert_eq!(scheduler.weight_vector.len(), 3);
-        assert_eq!(scheduler.weight_vector[&0], 1.0);
-        assert_eq!(scheduler.weight_vector[&1], 0.0);
-        assert_eq!(scheduler.weight_vector[&2], 0.0);
+        println!("102th: {:?}", scheduler.weight_vector);
+        assert!(scheduler.weight_vector[&0] > 0.999);
+        assert!(scheduler.weight_vector[&1] < 0.001);
+        assert!(scheduler.weight_vector[&2] < 0.001);
+
+        let prev_weight_vector = scheduler.weight_vector.clone();
+
+        // RTTs swap
+        scheduler.update(
+            &vec![(0, 300.0), (1, 200.0), (2, 100.0)]
+                .into_iter()
+                .collect(),
+        );
+        assert_eq!(scheduler.weight_vector.len(), 3);
+        println!("103th: {:?}", scheduler.weight_vector);
+        assert!(scheduler.weight_vector[&0] < prev_weight_vector[&0]);
+        assert!(f64::abs(scheduler.weight_vector[&1] - prev_weight_vector[&1]) < 0.001);
+        assert!(scheduler.weight_vector[&2] > prev_weight_vector[&2]);
     }
 }
