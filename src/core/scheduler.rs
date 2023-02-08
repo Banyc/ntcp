@@ -26,7 +26,7 @@ impl Scheduler {
     /// Do not include RTTs that are either infinite, NaN, or time out.
     pub fn update(&mut self, rtt_vector: &HashMap<RawFd, f64>) {
         // Scale RTTs to [0, 1] then standardize them to N(0, 1)
-        let Ok(clean_rtt_vector) = &standardize(&normalize(rtt_vector)) else {
+        let Ok(clean_rtt_vector) = &standardize(rtt_vector) else {
             // If there is no valid RTT, do nothing
             return;
         };
@@ -64,6 +64,7 @@ impl Scheduler {
 }
 
 #[must_use]
+#[allow(dead_code)]
 fn normalize(vector: &HashMap<RawFd, f64>) -> HashMap<RawFd, f64> {
     let mut normalized_vector = HashMap::new();
     let sum: f64 = vector.values().sum();
@@ -106,6 +107,7 @@ fn normalize_mut(vector: &mut HashMap<RawFd, f64>) {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
 

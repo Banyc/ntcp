@@ -25,7 +25,7 @@ TCP but with a bunch of sockets and a smart scheduler.
   - $w \in \mathbb{R}^n$: the weight vector
   - $N(v)$: standardize a vector $v$
   - $l : \mathbb{R}^n \times \mathbb{R}^n \to \mathbb{R}$: the loss function
-  - $l(r, w) = N(\frac{r}{\| r \|_1}) \cdot w$
+  - $l(r, w) = N(r) \cdot w$
   - $w' \in \mathbb{R}^n$: the next weight vector
   - $\alpha \in \mathbb{R}$: the learning rate
     - $a \in (10^{-6}, 1)$
