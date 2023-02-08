@@ -21,7 +21,7 @@ TCP but with a bunch of sockets and a smart scheduler.
   - $w \in \mathbb{R}^n$: the weight vector
   - $l : \mathbb{R}^n \times \mathbb{R}^n \to \mathbb{R}$: the loss function
   - $l(r, w) = \hat{r} \cdot w$
-    - $\hat{r}$: relative RTT vector
+    - $\hat{r}$: normalized RTT vector
   - $w' \in \mathbb{R}^n$: the next weight vector
   - $\alpha \in \mathbb{R}$: the learning rate
 - goal: minimize $l$
