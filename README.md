@@ -24,8 +24,7 @@ TCP but with a bunch of sockets and a smart scheduler.
   - $w_i$: the weight of the $i$-th connection
   - $w \in \mathbb{R}^n$: the weight vector
   - $l : \mathbb{R}^n \times \mathbb{R}^n \to \mathbb{R}$: the loss function
-  - $l(r, w) = \hat{r} \cdot w$
-    - $\hat{r}$: normalized RTT vector
+  - $l(r, w) = \frac{r}{\| r \|_1} \cdot w$
   - $w' \in \mathbb{R}^n$: the next weight vector
   - $\alpha \in \mathbb{R}$: the learning rate
 - goal: minimize $l$
@@ -41,6 +40,6 @@ TCP but with a bunch of sockets and a smart scheduler.
     0 & v_i < 0 \\
     v_i & v_i \geq 0 \\
   \end{cases} \\
-  w' = \frac{v'}{\| v' \|} \\
+  w' = \frac{v'}{\| v' \|_1} \\
   ```
   - $r$: a constant vector
