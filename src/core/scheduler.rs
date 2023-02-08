@@ -28,6 +28,9 @@ impl Scheduler {
         let normalized_rtt_vector = normalize(rtt_vector);
         for (fd, weight) in self.weight_vector.iter_mut() {
             *weight -= self.learning_rate * normalized_rtt_vector[fd];
+            if *weight < 0.0 {
+                *weight = 0.0;
+            }
         }
         normalize_mut(&mut self.weight_vector);
     }
@@ -88,5 +91,18 @@ mod tests {
         assert!(scheduler.weight_vector[&1] > 0.333);
         assert!(scheduler.weight_vector[&2] < 0.295);
         assert!(scheduler.weight_vector[&2] > 0.294);
+
+        // Converge final weight vector
+        for _ in 0..100 {
+            scheduler.update(
+                &vec![(0, 100.0), (1, 200.0), (2, 300.0)]
+                    .into_iter()
+                    .collect(),
+            );
+        }
+        assert_eq!(scheduler.weight_vector.len(), 3);
+        assert_eq!(scheduler.weight_vector[&0], 1.0);
+        assert_eq!(scheduler.weight_vector[&1], 0.0);
+        assert_eq!(scheduler.weight_vector[&2], 0.0);
     }
 }

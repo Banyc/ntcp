@@ -35,6 +35,12 @@ TCP but with a bunch of sockets and a smart scheduler.
   ```
 - the next weight vector $w' \in \mathbb{R}^n$:
   ```math
-  w' = \frac{w - \alpha \nabla l(r, w)}{\| w - \alpha \nabla l(r, w) \|}
+  v = w - \alpha \nabla l(r, w) \\
+  v_i' =
+  \begin{cases}
+    0 & v_i < 0 \\
+    v_i & v_i \geq 0 \\
+  \end{cases} \\
+  w' = \frac{v'}{\| v' \|} \\
   ```
   - $r$: a constant vector
