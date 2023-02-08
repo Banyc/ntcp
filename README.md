@@ -43,4 +43,4 @@ TCP but with a bunch of sockets and a smart scheduler.
   \end{cases} \\
   w' = \frac{v'}{\| v' \|_1} \\
   ```
-  - $r$: a constant vector
+  - $r$: considered as a constant vector in $\nabla l$
