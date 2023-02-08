@@ -4,7 +4,11 @@ TCP but with a bunch of sockets and a smart scheduler.
 
 ## Overview
 
+<div style="background-color:Gray">
+
 ![arch](img/arch.drawio.png)
+
+</div>
 
 - NTCP represents only one stream
 - NTCP guarantees that the data is delivered in order, without duplication or loss
