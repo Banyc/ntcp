@@ -26,7 +26,10 @@ impl Scheduler {
     /// Do not include RTTs that are either infinite, NaN, or time out.
     pub fn update(&mut self, rtt_vector: &HashMap<RawFd, f64>) {
         // Scale RTTs to [0, 1] then standardize them to N(0, 1)
-        let clean_rtt_vector = &standardize(&normalize(rtt_vector));
+        let Ok(clean_rtt_vector) = &standardize(&normalize(rtt_vector)) else {
+            // If there is no valid RTT, do nothing
+            return;
+        };
 
         // To remove dead fds from the next weight vector
         let mut next_weight_vector = HashMap::new();
@@ -71,18 +74,29 @@ fn normalize(vector: &HashMap<RawFd, f64>) -> HashMap<RawFd, f64> {
 }
 
 #[must_use]
-fn standardize(vector: &HashMap<RawFd, f64>) -> HashMap<RawFd, f64> {
+fn standardize(vector: &HashMap<RawFd, f64>) -> Result<HashMap<RawFd, f64>, StandardizeError> {
+    if vector.len() < 2 {
+        return Err(StandardizeError::TooFewSamples);
+    }
     let mut standardized_vector = HashMap::new();
-    let mean: f64 = vector.values().sum::<f64>() / vector.len() as f64;
+    let mean: f64 = vector.values().sum::<f64>() / (vector.len() - 1) as f64;
     let mut sum_of_squares = 0.0;
     for weight in vector.values() {
         sum_of_squares += (weight - mean).powi(2);
+    }
+    if sum_of_squares == 0.0 {
+        return Err(StandardizeError::ZeroStdDev);
     }
     let std_dev = (sum_of_squares / vector.len() as f64).sqrt();
     for (fd, weight) in vector {
         standardized_vector.insert(*fd, (*weight - mean) / std_dev);
     }
-    standardized_vector
+    Ok(standardized_vector)
+}
+
+enum StandardizeError {
+    ZeroStdDev,
+    TooFewSamples,
 }
 
 fn normalize_mut(vector: &mut HashMap<RawFd, f64>) {
@@ -160,5 +174,21 @@ mod tests {
         assert!(scheduler.weight_vector[&0] < prev_weight_vector[&0]);
         assert!(f64::abs(scheduler.weight_vector[&1] - prev_weight_vector[&1]) < 0.001);
         assert!(scheduler.weight_vector[&2] > prev_weight_vector[&2]);
+    }
+
+    #[test]
+    fn fd_removal() {
+        let mut scheduler = Scheduler::new(vec![0, 1, 2].into_iter(), 0.1);
+        assert_eq!(scheduler.weight_vector.len(), 3);
+        assert_eq!(scheduler.weight_vector[&0], 1.0 / 3.0);
+        assert_eq!(scheduler.weight_vector[&1], 1.0 / 3.0);
+        assert_eq!(scheduler.weight_vector[&2], 1.0 / 3.0);
+
+        // Update weight vector
+        scheduler.update(&vec![(0, 100.0), (1, 200.0)].into_iter().collect());
+        assert_eq!(scheduler.weight_vector.len(), 2);
+        println!("1st: {:?}", scheduler.weight_vector);
+        assert!(scheduler.weight_vector[&0] > 0.5);
+        assert!(scheduler.weight_vector[&1] < 0.5);
     }
 }
