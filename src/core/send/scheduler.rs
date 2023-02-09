@@ -7,6 +7,14 @@ pub struct Scheduler {
 
 impl Scheduler {
     #[must_use]
+    pub fn new_empty(learning_rate: f64) -> Self {
+        Self {
+            weight_vector: HashMap::new(),
+            learning_rate,
+        }
+    }
+
+    #[must_use]
     pub fn new(fd_vector: impl Iterator<Item = RawFd>, learning_rate: f64) -> Self {
         // Init weight vector
         let mut weight_vector = HashMap::new();
@@ -26,6 +34,7 @@ impl Scheduler {
 
     /// Do not include RTTs that are either infinite, NaN, or time out.
     pub fn update(&mut self, rtt_vector: &HashMap<RawFd, f64>) {
+        // let clean_rtt_vector = normalize(rtt_vector);
         let clean_rtt_vector = normalize(rtt_vector);
 
         // Get minimum RTT index
@@ -240,6 +249,23 @@ mod tests {
         println!("1st: {:?}", scheduler.weight_vector);
         assert!(scheduler.weight(&0) > 1.0 / 3.0);
         assert!(scheduler.weight(&1) > scheduler.weight(&2));
+        assert_eq!(scheduler.weight(&2), 0.0);
+    }
+
+    #[test]
+    fn from_empty_ok() {
+        let mut scheduler = Scheduler::new_empty(0.1);
+        assert_eq!(scheduler.weight_vector.len(), 0);
+
+        // Update weight vector
+        scheduler.update(
+            &vec![(0, 100.0), (1, 200.0), (2, 300.0)]
+                .into_iter()
+                .collect(),
+        );
+        assert_eq!(scheduler.weight_vector.len(), 3);
+        assert_eq!(scheduler.weight(&0), 1.0);
+        assert_eq!(scheduler.weight(&1), 0.0);
         assert_eq!(scheduler.weight(&2), 0.0);
     }
 }
