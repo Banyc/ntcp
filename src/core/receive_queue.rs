@@ -72,6 +72,7 @@ mod tests {
         assert_eq!(queue.receive(Seq16::new(0)), ReceiveResult::Accept);
         let first = queue.pop();
         assert_eq!(first, Some(Seq16::new(0)));
+        assert_eq!(queue.receive(Seq16::new(0)), ReceiveResult::Reject);
         let first = queue.pop();
         assert_eq!(first, Some(Seq16::new(1)));
         let first = queue.pop();
