@@ -25,7 +25,7 @@ impl Scheduler {
 
     /// Do not include RTTs that are either infinite, NaN, or time out.
     pub fn update(&mut self, rtt_vector: &HashMap<RawFd, f64>) {
-        // Scale RTTs to [0, 1] then standardize them to N(0, 1)
+        // Standardize RTTs to N(0, 1)
         let Ok(clean_rtt_vector) = &standardize(rtt_vector) else {
             // If there is no valid RTT, do nothing
             return;
