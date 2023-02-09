@@ -25,9 +25,10 @@ impl Scheduler {
 
     /// Do not include RTTs that are either infinite, NaN, or time out.
     pub fn update(&mut self, rtt_vector: &HashMap<RawFd, f64>) {
-        // Standardize RTTs to N(0, 1)
-        let Ok(clean_rtt_vector) = &standardize(rtt_vector) else {
-            // If there is no valid RTT, do nothing
+        let clean_rtt_vector = normalize(rtt_vector);
+
+        // Get minimum RTT index
+        let Some(min_rtt_index) = arg_min_key(clean_rtt_vector.iter()) else {
             return;
         };
 
@@ -39,8 +40,14 @@ impl Scheduler {
             // Get current weight
             let weight = self.weight(fd);
 
+            // Calculate partial derivative
+            let partial_derivative = match fd == min_rtt_index {
+                true => -*rtt,
+                false => *rtt,
+            };
+
             // Nudge the weight in the opposite direction of the gradient
-            let mut next_weight = weight - self.learning_rate * rtt;
+            let mut next_weight = weight - self.learning_rate * partial_derivative;
 
             // Prevent negative weight
             if next_weight < 0.0 {
@@ -78,6 +85,7 @@ fn normalize(vector: &HashMap<RawFd, f64>) -> HashMap<RawFd, f64> {
 }
 
 #[must_use]
+#[allow(dead_code)]
 fn standardize(vector: &HashMap<RawFd, f64>) -> Result<HashMap<RawFd, f64>, StandardizeError> {
     if vector.len() < 2 {
         return Err(StandardizeError::TooFewSamples);
@@ -110,6 +118,22 @@ fn normalize_mut(vector: &mut HashMap<RawFd, f64>) {
     }
 }
 
+#[must_use]
+fn arg_min_key<'a, K, I>(vector: I) -> Option<&'a K>
+where
+    I: Iterator<Item = (&'a K, &'a f64)>,
+{
+    let mut min_key = None;
+    let mut min_value = f64::MAX;
+    for (key, value) in vector {
+        if *value < min_value {
+            min_value = *value;
+            min_key = Some(key);
+        }
+    }
+    min_key
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -133,7 +157,7 @@ mod tests {
         assert_eq!(scheduler.weight_vector.len(), 3);
         println!("1st: {:?}", scheduler.weight_vector);
         assert!(scheduler.weight(&0) > prev_weight_vector[&0]);
-        assert!(f64::abs(scheduler.weight(&1) - prev_weight_vector[&1]) < 0.001);
+        assert!(scheduler.weight(&1) < prev_weight_vector[&1]);
         assert!(scheduler.weight(&2) < prev_weight_vector[&2]);
 
         let prev_weight_vector = scheduler.weight_vector.clone();
@@ -147,7 +171,7 @@ mod tests {
         assert_eq!(scheduler.weight_vector.len(), 3);
         println!("2nd: {:?}", scheduler.weight_vector);
         assert!(scheduler.weight(&0) > prev_weight_vector[&0]);
-        assert!(f64::abs(scheduler.weight(&1) - prev_weight_vector[&1]) < 0.001);
+        assert!(scheduler.weight(&1) < prev_weight_vector[&1]);
         assert!(scheduler.weight(&2) < prev_weight_vector[&2]);
 
         let _prev_weight_vector = scheduler.weight_vector.clone();

@@ -19,13 +19,13 @@ TCP but with a bunch of sockets and a smart scheduler.
 - say:
   - RTT of a TCP connection inversely represents the quality of the connection
   - there are $n$ connections
-  - $r_i$: the RTT of the $i$-th connection
   - $r \in \mathbb{R}^n$: the RTT vector
-  - $w_i$: the weight of the $i$-th connection
+    - $r_i$: the RTT of the $i$-th connection
   - $w \in \mathbb{R}^n$: the weight vector
+    - $\frac{w}{\| w \|_1} = 1$
+    - $w_i$: the weight of the $i$-th connection
   - $N(v)$: standardize a vector $v$
   - $l : \mathbb{R}^n \times \mathbb{R}^n \to \mathbb{R}$: the loss function
-  - $l(r, w) = N(r) \cdot w$
   - $w' \in \mathbb{R}^n$: the next weight vector
   - $\alpha \in \mathbb{R}$: the learning rate
     - $a \in (10^{-6}, 1)$
@@ -34,6 +34,18 @@ TCP but with a bunch of sockets and a smart scheduler.
   ```math
   w = \left( \frac{1}{n}, \dots, \frac{1}{n} \right)
   ```
+- the loss function $l$:
+  ```math
+  l(r, w) = \frac{r}{\| r \|_1} \cdot | w - y |
+  ```
+  - $y$: an one-hot vector
+    - ```math
+      y_i =
+      \begin{cases}
+        1 & i = \arg \min_i r_i \\
+        0 & \text{otherwise} \\
+      \end{cases}
+      ```
 - the next weight vector $w' \in \mathbb{R}^n$:
   ```math
   v = w - \alpha \nabla l(r, w) \\
