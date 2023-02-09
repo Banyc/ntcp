@@ -193,4 +193,24 @@ mod tests {
         assert!(scheduler.weight_vector[&0] > 0.5);
         assert!(scheduler.weight_vector[&1] < 0.5);
     }
+
+    #[test]
+    fn fd_addition() {
+        let mut scheduler = Scheduler::new(vec![0, 1].into_iter(), 0.1);
+        assert_eq!(scheduler.weight_vector.len(), 2);
+        assert_eq!(scheduler.weight_vector[&0], 1.0 / 2.0);
+        assert_eq!(scheduler.weight_vector[&1], 1.0 / 2.0);
+
+        // Update weight vector
+        scheduler.update(
+            &vec![(0, 100.0), (1, 300.0), (2, 200.0)]
+                .into_iter()
+                .collect(),
+        );
+        assert_eq!(scheduler.weight_vector.len(), 3);
+        println!("1st: {:?}", scheduler.weight_vector);
+        assert!(scheduler.weight_vector[&0] > 1.0 / 3.0);
+        assert!(scheduler.weight_vector[&1] > scheduler.weight_vector[&2]);
+        assert_eq!(scheduler.weight_vector[&2], 0.0);
+    }
 }
