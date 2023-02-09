@@ -37,13 +37,7 @@ impl Scheduler {
         // Update weight vector
         for (fd, rtt) in clean_rtt_vector.iter() {
             // Get current weight
-            let weight = match self.weight_vector.get(fd) {
-                Some(weight) => *weight,
-                None => {
-                    // This is a new fd
-                    0.0
-                }
-            };
+            let weight = self.weight(fd);
 
             // Nudge the weight in the opposite direction of the gradient
             let mut next_weight = weight - self.learning_rate * rtt;
@@ -62,6 +56,13 @@ impl Scheduler {
 
         // Store weight vector
         self.weight_vector = next_weight_vector;
+    }
+
+    pub fn weight(&self, fd: &RawFd) -> f64 {
+        match self.weight_vector.get(fd) {
+            Some(weight) => *weight,
+            None => 0.0, // New FD
+        }
     }
 }
 
@@ -117,9 +118,9 @@ mod tests {
     fn ok() {
         let mut scheduler = Scheduler::new(vec![0, 1, 2].into_iter(), 0.1);
         assert_eq!(scheduler.weight_vector.len(), 3);
-        assert_eq!(scheduler.weight_vector[&0], 1.0 / 3.0);
-        assert_eq!(scheduler.weight_vector[&1], 1.0 / 3.0);
-        assert_eq!(scheduler.weight_vector[&2], 1.0 / 3.0);
+        assert_eq!(scheduler.weight(&0), 1.0 / 3.0);
+        assert_eq!(scheduler.weight(&1), 1.0 / 3.0);
+        assert_eq!(scheduler.weight(&2), 1.0 / 3.0);
 
         let prev_weight_vector = scheduler.weight_vector.clone();
 
@@ -131,9 +132,9 @@ mod tests {
         );
         assert_eq!(scheduler.weight_vector.len(), 3);
         println!("1st: {:?}", scheduler.weight_vector);
-        assert!(scheduler.weight_vector[&0] > prev_weight_vector[&0]);
-        assert!(f64::abs(scheduler.weight_vector[&1] - prev_weight_vector[&1]) < 0.001);
-        assert!(scheduler.weight_vector[&2] < prev_weight_vector[&2]);
+        assert!(scheduler.weight(&0) > prev_weight_vector[&0]);
+        assert!(f64::abs(scheduler.weight(&1) - prev_weight_vector[&1]) < 0.001);
+        assert!(scheduler.weight(&2) < prev_weight_vector[&2]);
 
         let prev_weight_vector = scheduler.weight_vector.clone();
 
@@ -145,9 +146,9 @@ mod tests {
         );
         assert_eq!(scheduler.weight_vector.len(), 3);
         println!("2nd: {:?}", scheduler.weight_vector);
-        assert!(scheduler.weight_vector[&0] > prev_weight_vector[&0]);
-        assert!(f64::abs(scheduler.weight_vector[&1] - prev_weight_vector[&1]) < 0.001);
-        assert!(scheduler.weight_vector[&2] < prev_weight_vector[&2]);
+        assert!(scheduler.weight(&0) > prev_weight_vector[&0]);
+        assert!(f64::abs(scheduler.weight(&1) - prev_weight_vector[&1]) < 0.001);
+        assert!(scheduler.weight(&2) < prev_weight_vector[&2]);
 
         let _prev_weight_vector = scheduler.weight_vector.clone();
 
@@ -161,9 +162,9 @@ mod tests {
         }
         assert_eq!(scheduler.weight_vector.len(), 3);
         println!("102th: {:?}", scheduler.weight_vector);
-        assert!(scheduler.weight_vector[&0] > 0.999);
-        assert!(scheduler.weight_vector[&1] < 0.001);
-        assert!(scheduler.weight_vector[&2] < 0.001);
+        assert!(scheduler.weight(&0) > 0.999);
+        assert!(scheduler.weight(&1) < 0.001);
+        assert!(scheduler.weight(&2) < 0.001);
 
         let prev_weight_vector = scheduler.weight_vector.clone();
 
@@ -175,33 +176,33 @@ mod tests {
         );
         assert_eq!(scheduler.weight_vector.len(), 3);
         println!("103th: {:?}", scheduler.weight_vector);
-        assert!(scheduler.weight_vector[&0] < prev_weight_vector[&0]);
-        assert!(f64::abs(scheduler.weight_vector[&1] - prev_weight_vector[&1]) < 0.001);
-        assert!(scheduler.weight_vector[&2] > prev_weight_vector[&2]);
+        assert!(scheduler.weight(&0) < prev_weight_vector[&0]);
+        assert!(f64::abs(scheduler.weight(&1) - prev_weight_vector[&1]) < 0.001);
+        assert!(scheduler.weight(&2) > prev_weight_vector[&2]);
     }
 
     #[test]
     fn fd_removal() {
         let mut scheduler = Scheduler::new(vec![0, 1, 2].into_iter(), 0.1);
         assert_eq!(scheduler.weight_vector.len(), 3);
-        assert_eq!(scheduler.weight_vector[&0], 1.0 / 3.0);
-        assert_eq!(scheduler.weight_vector[&1], 1.0 / 3.0);
-        assert_eq!(scheduler.weight_vector[&2], 1.0 / 3.0);
+        assert_eq!(scheduler.weight(&0), 1.0 / 3.0);
+        assert_eq!(scheduler.weight(&1), 1.0 / 3.0);
+        assert_eq!(scheduler.weight(&2), 1.0 / 3.0);
 
         // Update weight vector
         scheduler.update(&vec![(0, 100.0), (1, 200.0)].into_iter().collect());
         assert_eq!(scheduler.weight_vector.len(), 2);
         println!("1st: {:?}", scheduler.weight_vector);
-        assert!(scheduler.weight_vector[&0] > 0.5);
-        assert!(scheduler.weight_vector[&1] < 0.5);
+        assert!(scheduler.weight(&0) > 0.5);
+        assert!(scheduler.weight(&1) < 0.5);
     }
 
     #[test]
     fn fd_addition() {
         let mut scheduler = Scheduler::new(vec![0, 1].into_iter(), 0.1);
         assert_eq!(scheduler.weight_vector.len(), 2);
-        assert_eq!(scheduler.weight_vector[&0], 1.0 / 2.0);
-        assert_eq!(scheduler.weight_vector[&1], 1.0 / 2.0);
+        assert_eq!(scheduler.weight(&0), 1.0 / 2.0);
+        assert_eq!(scheduler.weight(&1), 1.0 / 2.0);
 
         // Update weight vector
         scheduler.update(
@@ -211,8 +212,8 @@ mod tests {
         );
         assert_eq!(scheduler.weight_vector.len(), 3);
         println!("1st: {:?}", scheduler.weight_vector);
-        assert!(scheduler.weight_vector[&0] > 1.0 / 3.0);
-        assert!(scheduler.weight_vector[&1] > scheduler.weight_vector[&2]);
-        assert_eq!(scheduler.weight_vector[&2], 0.0);
+        assert!(scheduler.weight(&0) > 1.0 / 3.0);
+        assert!(scheduler.weight(&1) > scheduler.weight(&2));
+        assert_eq!(scheduler.weight(&2), 0.0);
     }
 }
