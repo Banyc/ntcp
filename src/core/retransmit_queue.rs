@@ -12,6 +12,7 @@ pub struct RetransmitQueue {
 }
 
 impl RetransmitQueue {
+    #[must_use]
     pub fn new(capacity: usize) -> Self {
         Self {
             tx_time: HashMap::new(),
@@ -19,6 +20,7 @@ impl RetransmitQueue {
         }
     }
 
+    #[must_use]
     pub fn retransmit(
         &self,
         seq: Seq16,

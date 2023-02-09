@@ -6,6 +6,7 @@ pub struct Scheduler {
 }
 
 impl Scheduler {
+    #[must_use]
     pub fn new(fd_vector: impl Iterator<Item = RawFd>, learning_rate: f64) -> Self {
         // Init weight vector
         let mut weight_vector = HashMap::new();
@@ -65,6 +66,7 @@ impl Scheduler {
         self.weight_vector = next_weight_vector;
     }
 
+    #[must_use]
     pub fn weight(&self, fd: &RawFd) -> f64 {
         match self.weight_vector.get(fd) {
             Some(weight) => *weight,

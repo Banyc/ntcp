@@ -12,6 +12,7 @@ pub struct ReceiveQueue {
 }
 
 impl ReceiveQueue {
+    #[must_use]
     pub fn new(capacity: usize) -> Self {
         Self {
             queue: BTreeSet::new(),
@@ -20,6 +21,7 @@ impl ReceiveQueue {
         }
     }
 
+    #[must_use]
     pub fn receive(&mut self, seq: Seq16) -> ReceiveResult {
         // Reject out of bounds packets
         if seq < self.shadow_first {
@@ -35,6 +37,7 @@ impl ReceiveQueue {
         return ReceiveResult::Accept;
     }
 
+    #[must_use]
     pub fn pop(&mut self) -> Option<Seq16> {
         let first = self.queue.iter().next().copied();
         if let Some(first) = first {

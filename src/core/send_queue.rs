@@ -12,6 +12,7 @@ pub struct SendQueue {
 }
 
 impl SendQueue {
+    #[must_use]
     pub fn new(capacity: usize) -> Self {
         Self {
             queue: BTreeSet::new(),
@@ -20,6 +21,7 @@ impl SendQueue {
         }
     }
 
+    #[must_use]
     pub fn send(&mut self) -> Option<Seq16> {
         // Reject if the queue is full
         if self.queue.len() >= self.capacity {
