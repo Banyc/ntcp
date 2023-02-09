@@ -57,3 +57,18 @@ TCP but with a bunch of sockets and a smart scheduler.
   w' = \frac{v'}{\| v' \|_1} \\
   ```
   - $r$: considered as a constant vector in $\nabla l$
+
+## Send
+
+- entity relationship diagram:
+  ```dot
+  digraph {
+    Seq -> FD
+    Seq -> "RTT stopwatch"
+    Seq -> Payload
+    Seq -> "Send queue"
+    "RTT stopwatch" -> Timeout
+    FD -> RTT
+    FD -> Weight
+  }
+  ```
