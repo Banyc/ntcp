@@ -1,21 +1,18 @@
-use std::{collections::HashMap, time};
+use std::time;
 
 use seq::Seq16;
 
-use super::{RttStopwatch, SendQueue};
+use super::TimedSendQueue;
 
 pub struct RetransmitQueue {
-    rtt_stopwatches: HashMap<Seq16, RttStopwatch>,
-    /// Packets that have been sent but not yet acknowledged
-    send_queue: SendQueue,
+    timed_send_queue: TimedSendQueue,
 }
 
 impl RetransmitQueue {
     #[must_use]
     pub fn new(capacity: usize) -> Self {
         Self {
-            rtt_stopwatches: HashMap::new(),
-            send_queue: SendQueue::new(capacity),
+            timed_send_queue: TimedSendQueue::new(capacity),
         }
     }
 
@@ -25,7 +22,7 @@ impl RetransmitQueue {
         seq: Seq16,
         now: time::Instant,
     ) -> Result<RetransmitResult, RetransmitError> {
-        let Some(rtt_stopwatch) = self.rtt_stopwatches.get(&seq) else {
+        let Some(rtt_stopwatch) = self.timed_send_queue.rtt_stopwatch(seq) else {
             return Err(RetransmitError::SequenceNumberNotFound);
         };
         if !rtt_stopwatch.has_timed_out(now) {
@@ -34,24 +31,17 @@ impl RetransmitQueue {
 
         // Cancel the rtt stopwatch
         // Do not start a new rtt stopwatch here
-        self.rtt_stopwatches.remove(&seq);
+        self.timed_send_queue.cancel_rtt_stopwatch(seq);
 
         Ok(RetransmitResult::Retransmit)
     }
 
     pub fn send(&mut self, now: time::Instant, timeout: time::Duration) -> Option<Seq16> {
-        let Some(seq) = self.send_queue.send() else {
-            return None;
-        };
-        self.rtt_stopwatches
-            .insert(seq, RttStopwatch::new(now, timeout));
-        Some(seq)
+        self.timed_send_queue.send(now, timeout)
     }
 
     pub fn ack(&mut self, seq: Seq16, now: time::Instant) -> Option<time::Duration> {
-        self.send_queue.ack(seq);
-        let rtt_stopwatch = self.rtt_stopwatches.remove(&seq);
-        rtt_stopwatch.map(|stopwatch| stopwatch.into_rtt(now))
+        self.timed_send_queue.ack(seq, now)
     }
 }
 
