@@ -24,7 +24,6 @@ impl RetransmitQueue {
         &mut self,
         seq: Seq16,
         now: time::Instant,
-        next_timeout: time::Duration,
     ) -> Result<RetransmitResult, RetransmitError> {
         let Some(rtt_stopwatch) = self.rtt_stopwatches.get(&seq) else {
             return Err(RetransmitError::SequenceNumberNotFound);
@@ -32,9 +31,11 @@ impl RetransmitQueue {
         if !rtt_stopwatch.has_timed_out(now) {
             return Ok(RetransmitResult::Wait);
         }
+
+        // Cancel the rtt stopwatch
+        // Do not start a new rtt stopwatch here
         self.rtt_stopwatches.remove(&seq);
-        self.rtt_stopwatches
-            .insert(seq, RttStopwatch::new(now, next_timeout));
+
         Ok(RetransmitResult::Retransmit)
     }
 
@@ -75,30 +76,38 @@ mod tests {
         let now = time::Instant::now();
         let timeout = time::Duration::from_millis(100);
         assert_eq!(
-            queue.retransmit(Seq16::new(0), now, timeout),
+            queue.retransmit(Seq16::new(0), now),
             Err(RetransmitError::SequenceNumberNotFound)
         );
         assert_eq!(queue.send(now, timeout), Some(Seq16::new(0)));
         assert_eq!(
-            queue.retransmit(Seq16::new(0), now, timeout),
+            queue.retransmit(Seq16::new(0), now),
             Ok(RetransmitResult::Wait)
         );
         assert_eq!(
-            queue.retransmit(Seq16::new(1), now, timeout),
+            queue.retransmit(Seq16::new(1), now),
             Err(RetransmitError::SequenceNumberNotFound)
         );
         let now = now + timeout;
         assert_eq!(
-            queue.retransmit(Seq16::new(0), now, timeout),
+            queue.retransmit(Seq16::new(0), now),
             Ok(RetransmitResult::Retransmit)
         );
+        assert_eq!(queue.ack(Seq16::new(0), now), None);
         assert_eq!(
-            queue.ack(Seq16::new(0), now),
-            Some(time::Duration::from_secs(0))
-        );
-        assert_eq!(
-            queue.retransmit(Seq16::new(0), now, timeout),
+            queue.retransmit(Seq16::new(0), now),
             Err(RetransmitError::SequenceNumberNotFound)
         );
+    }
+
+    #[test]
+    fn rtt() {
+        let mut queue = RetransmitQueue::new(10);
+        let now = time::Instant::now();
+        let timeout = time::Duration::from_millis(100);
+        assert_eq!(queue.send(now, timeout), Some(Seq16::new(0)));
+        let rtt = time::Duration::from_millis(50);
+        let now = now + rtt;
+        assert_eq!(queue.ack(Seq16::new(0), now), Some(rtt));
     }
 }
