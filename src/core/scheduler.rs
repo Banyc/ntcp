@@ -36,6 +36,7 @@ impl Scheduler {
 
         // Update weight vector
         for (fd, rtt) in clean_rtt_vector.iter() {
+            // Get current weight
             let weight = match self.weight_vector.get(fd) {
                 Some(weight) => *weight,
                 None => {
@@ -43,7 +44,8 @@ impl Scheduler {
                     0.0
                 }
             };
-            // Gradually decrease weight
+
+            // Nudge the weight in the opposite direction of the gradient
             let mut next_weight = weight - self.learning_rate * rtt;
 
             // Prevent negative weight
