@@ -2,11 +2,10 @@ use std::{collections::HashMap, time};
 
 use seq::Seq16;
 
-use super::SendQueue;
+use super::{RttStopwatch, SendQueue};
 
 pub struct RetransmitQueue {
-    /// The time at which each packet was sent
-    tx_time: HashMap<Seq16, time::Instant>,
+    rtt_stopwatches: HashMap<Seq16, RttStopwatch>,
     /// Packets that have been sent but not yet acknowledged
     send_queue: SendQueue,
 }
@@ -15,45 +14,50 @@ impl RetransmitQueue {
     #[must_use]
     pub fn new(capacity: usize) -> Self {
         Self {
-            tx_time: HashMap::new(),
+            rtt_stopwatches: HashMap::new(),
             send_queue: SendQueue::new(capacity),
         }
     }
 
     #[must_use]
     pub fn retransmit(
-        &self,
+        &mut self,
         seq: Seq16,
         now: time::Instant,
-        timeout: time::Duration,
+        next_timeout: time::Duration,
     ) -> Result<RetransmitResult, RetransmitError> {
-        let Some(tx_time) = self.tx_time.get(&seq) else {
+        let Some(rtt_stopwatch) = self.rtt_stopwatches.get(&seq) else {
             return Err(RetransmitError::SequenceNumberNotFound);
         };
-        if now - *tx_time >= timeout {
-            return Ok(RetransmitResult::Timeout);
+        if !rtt_stopwatch.has_timed_out(now) {
+            return Ok(RetransmitResult::Wait);
         }
-        Ok(RetransmitResult::Waiting)
+        self.rtt_stopwatches.remove(&seq);
+        self.rtt_stopwatches
+            .insert(seq, RttStopwatch::new(now, next_timeout));
+        Ok(RetransmitResult::Retransmit)
     }
 
-    pub fn send(&mut self, now: time::Instant) -> Option<Seq16> {
+    pub fn send(&mut self, now: time::Instant, timeout: time::Duration) -> Option<Seq16> {
         let Some(seq) = self.send_queue.send() else {
             return None;
         };
-        self.tx_time.insert(seq, now);
+        self.rtt_stopwatches
+            .insert(seq, RttStopwatch::new(now, timeout));
         Some(seq)
     }
 
-    pub fn ack(&mut self, seq: Seq16) {
+    pub fn ack(&mut self, seq: Seq16, now: time::Instant) -> Option<time::Duration> {
         self.send_queue.ack(seq);
-        self.tx_time.remove(&seq);
+        let rtt_stopwatch = self.rtt_stopwatches.remove(&seq);
+        rtt_stopwatch.map(|stopwatch| stopwatch.into_rtt(now))
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum RetransmitResult {
-    Waiting,
-    Timeout,
+    Wait,
+    Retransmit,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -74,10 +78,10 @@ mod tests {
             queue.retransmit(Seq16::new(0), now, timeout),
             Err(RetransmitError::SequenceNumberNotFound)
         );
-        assert_eq!(queue.send(now), Some(Seq16::new(0)));
+        assert_eq!(queue.send(now, timeout), Some(Seq16::new(0)));
         assert_eq!(
             queue.retransmit(Seq16::new(0), now, timeout),
-            Ok(RetransmitResult::Waiting)
+            Ok(RetransmitResult::Wait)
         );
         assert_eq!(
             queue.retransmit(Seq16::new(1), now, timeout),
@@ -86,9 +90,12 @@ mod tests {
         let now = now + timeout;
         assert_eq!(
             queue.retransmit(Seq16::new(0), now, timeout),
-            Ok(RetransmitResult::Timeout)
+            Ok(RetransmitResult::Retransmit)
         );
-        queue.ack(Seq16::new(0));
+        assert_eq!(
+            queue.ack(Seq16::new(0), now),
+            Some(time::Duration::from_secs(0))
+        );
         assert_eq!(
             queue.retransmit(Seq16::new(0), now, timeout),
             Err(RetransmitError::SequenceNumberNotFound)

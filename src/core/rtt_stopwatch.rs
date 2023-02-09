@@ -15,7 +15,7 @@ impl RttStopwatch {
     }
 
     #[must_use]
-    pub fn is_timeout(&self, now: time::Instant) -> bool {
+    pub fn has_timed_out(&self, now: time::Instant) -> bool {
         now - self.start >= self.timeout
     }
 
