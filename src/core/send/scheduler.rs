@@ -16,29 +16,39 @@ impl Scheduler {
 
     #[must_use]
     pub fn new(fd_vector: impl Iterator<Item = RawFd>, learning_rate: f64) -> Self {
-        // Init weight vector
-        let mut weight_vector = HashMap::new();
-        for fd in fd_vector {
-            weight_vector.insert(fd, 1.0);
-        }
-        let even_weight = 1.0 / weight_vector.len() as f64;
-        for weight in weight_vector.values_mut() {
-            *weight = even_weight;
-        }
-
-        Self {
-            weight_vector,
+        let mut this = Self {
+            weight_vector: HashMap::new(),
             learning_rate,
+        };
+
+        // Init weight vector
+        this.init_weight(fd_vector);
+
+        this
+    }
+
+    fn init_weight(&mut self, fds: impl Iterator<Item = RawFd>) {
+        for fd in fds {
+            self.weight_vector.insert(fd, 1.0);
+        }
+        let even_weight = 1.0 / self.weight_vector.len() as f64;
+        for weight in self.weight_vector.values_mut() {
+            *weight = even_weight;
         }
     }
 
     /// Do not include RTTs that are either infinite, NaN, or time out.
     pub fn update(&mut self, rtt_vector: &HashMap<RawFd, f64>) {
-        // let clean_rtt_vector = normalize(rtt_vector);
+        if self.weight_vector.len() == 0 {
+            // Init weight vector
+            self.init_weight(rtt_vector.keys().copied());
+        }
+
         let clean_rtt_vector = normalize(rtt_vector);
 
         // Get minimum RTT index
         let Some(min_rtt_index) = arg_min_key(clean_rtt_vector.iter()) else {
+            // `rtt_vector` is empty
             return;
         };
 
@@ -48,7 +58,7 @@ impl Scheduler {
         // Update weight vector
         for (fd, rtt) in clean_rtt_vector.iter() {
             // Get current weight
-            let weight = self.weight(fd);
+            let weight = self.weight(fd).unwrap();
 
             // Calculate partial derivative
             let partial_derivative = match fd == min_rtt_index {
@@ -76,11 +86,16 @@ impl Scheduler {
     }
 
     #[must_use]
-    pub fn weight(&self, fd: &RawFd) -> f64 {
-        match self.weight_vector.get(fd) {
+    pub fn weight(&self, fd: &RawFd) -> Option<f64> {
+        if self.weight_vector.len() == 0 {
+            // A valid weight vector cannot be empty
+            return None;
+        }
+        let weight = match self.weight_vector.get(fd) {
             Some(weight) => *weight,
             None => 0.0, // New FD
-        }
+        };
+        Some(weight)
     }
 }
 
@@ -153,9 +168,9 @@ mod tests {
     fn ok() {
         let mut scheduler = Scheduler::new(vec![0, 1, 2].into_iter(), 0.1);
         assert_eq!(scheduler.weight_vector.len(), 3);
-        assert_eq!(scheduler.weight(&0), 1.0 / 3.0);
-        assert_eq!(scheduler.weight(&1), 1.0 / 3.0);
-        assert_eq!(scheduler.weight(&2), 1.0 / 3.0);
+        assert_eq!(scheduler.weight(&0).unwrap(), 1.0 / 3.0);
+        assert_eq!(scheduler.weight(&1).unwrap(), 1.0 / 3.0);
+        assert_eq!(scheduler.weight(&2).unwrap(), 1.0 / 3.0);
 
         let prev_weight_vector = scheduler.weight_vector.clone();
 
@@ -167,9 +182,9 @@ mod tests {
         );
         assert_eq!(scheduler.weight_vector.len(), 3);
         println!("1st: {:?}", scheduler.weight_vector);
-        assert!(scheduler.weight(&0) > prev_weight_vector[&0]);
-        assert!(scheduler.weight(&1) < prev_weight_vector[&1]);
-        assert!(scheduler.weight(&2) < prev_weight_vector[&2]);
+        assert!(scheduler.weight(&0).unwrap() > prev_weight_vector[&0]);
+        assert!(scheduler.weight(&1).unwrap() < prev_weight_vector[&1]);
+        assert!(scheduler.weight(&2).unwrap() < prev_weight_vector[&2]);
 
         let prev_weight_vector = scheduler.weight_vector.clone();
 
@@ -181,9 +196,9 @@ mod tests {
         );
         assert_eq!(scheduler.weight_vector.len(), 3);
         println!("2nd: {:?}", scheduler.weight_vector);
-        assert!(scheduler.weight(&0) > prev_weight_vector[&0]);
-        assert!(scheduler.weight(&1) < prev_weight_vector[&1]);
-        assert!(scheduler.weight(&2) < prev_weight_vector[&2]);
+        assert!(scheduler.weight(&0).unwrap() > prev_weight_vector[&0]);
+        assert!(scheduler.weight(&1).unwrap() < prev_weight_vector[&1]);
+        assert!(scheduler.weight(&2).unwrap() < prev_weight_vector[&2]);
 
         let _prev_weight_vector = scheduler.weight_vector.clone();
 
@@ -197,9 +212,9 @@ mod tests {
         }
         assert_eq!(scheduler.weight_vector.len(), 3);
         println!("102th: {:?}", scheduler.weight_vector);
-        assert!(scheduler.weight(&0) > 0.999);
-        assert!(scheduler.weight(&1) < 0.001);
-        assert!(scheduler.weight(&2) < 0.001);
+        assert!(scheduler.weight(&0).unwrap() > 0.999);
+        assert!(scheduler.weight(&1).unwrap() < 0.001);
+        assert!(scheduler.weight(&2).unwrap() < 0.001);
 
         let prev_weight_vector = scheduler.weight_vector.clone();
 
@@ -211,33 +226,33 @@ mod tests {
         );
         assert_eq!(scheduler.weight_vector.len(), 3);
         println!("103th: {:?}", scheduler.weight_vector);
-        assert!(scheduler.weight(&0) < prev_weight_vector[&0]);
-        assert!(f64::abs(scheduler.weight(&1) - prev_weight_vector[&1]) < 0.001);
-        assert!(scheduler.weight(&2) > prev_weight_vector[&2]);
+        assert!(scheduler.weight(&0).unwrap() < prev_weight_vector[&0]);
+        assert!(f64::abs(scheduler.weight(&1).unwrap() - prev_weight_vector[&1]) < 0.001);
+        assert!(scheduler.weight(&2).unwrap() > prev_weight_vector[&2]);
     }
 
     #[test]
     fn fd_removal() {
         let mut scheduler = Scheduler::new(vec![0, 1, 2].into_iter(), 0.1);
         assert_eq!(scheduler.weight_vector.len(), 3);
-        assert_eq!(scheduler.weight(&0), 1.0 / 3.0);
-        assert_eq!(scheduler.weight(&1), 1.0 / 3.0);
-        assert_eq!(scheduler.weight(&2), 1.0 / 3.0);
+        assert_eq!(scheduler.weight(&0).unwrap(), 1.0 / 3.0);
+        assert_eq!(scheduler.weight(&1).unwrap(), 1.0 / 3.0);
+        assert_eq!(scheduler.weight(&2).unwrap(), 1.0 / 3.0);
 
         // Update weight vector
         scheduler.update(&vec![(0, 100.0), (1, 200.0)].into_iter().collect());
         assert_eq!(scheduler.weight_vector.len(), 2);
         println!("1st: {:?}", scheduler.weight_vector);
-        assert!(scheduler.weight(&0) > 0.5);
-        assert!(scheduler.weight(&1) < 0.5);
+        assert!(scheduler.weight(&0).unwrap() > 0.5);
+        assert!(scheduler.weight(&1).unwrap() < 0.5);
     }
 
     #[test]
     fn fd_addition() {
         let mut scheduler = Scheduler::new(vec![0, 1].into_iter(), 0.1);
         assert_eq!(scheduler.weight_vector.len(), 2);
-        assert_eq!(scheduler.weight(&0), 1.0 / 2.0);
-        assert_eq!(scheduler.weight(&1), 1.0 / 2.0);
+        assert_eq!(scheduler.weight(&0).unwrap(), 1.0 / 2.0);
+        assert_eq!(scheduler.weight(&1).unwrap(), 1.0 / 2.0);
 
         // Update weight vector
         scheduler.update(
@@ -247,9 +262,9 @@ mod tests {
         );
         assert_eq!(scheduler.weight_vector.len(), 3);
         println!("1st: {:?}", scheduler.weight_vector);
-        assert!(scheduler.weight(&0) > 1.0 / 3.0);
-        assert!(scheduler.weight(&1) > scheduler.weight(&2));
-        assert_eq!(scheduler.weight(&2), 0.0);
+        assert!(scheduler.weight(&0).unwrap() > 1.0 / 3.0);
+        assert!(scheduler.weight(&1).unwrap() > scheduler.weight(&2).unwrap());
+        assert_eq!(scheduler.weight(&2).unwrap(), 0.0);
     }
 
     #[test]
@@ -264,8 +279,8 @@ mod tests {
                 .collect(),
         );
         assert_eq!(scheduler.weight_vector.len(), 3);
-        assert_eq!(scheduler.weight(&0), 1.0);
-        assert_eq!(scheduler.weight(&1), 0.0);
-        assert_eq!(scheduler.weight(&2), 0.0);
+        assert!(scheduler.weight(&0).unwrap() > 1.0 / 3.0);
+        assert!(scheduler.weight(&1).unwrap() < 1.0 / 3.0);
+        assert!(scheduler.weight(&2).unwrap() < 1.0 / 3.0);
     }
 }
