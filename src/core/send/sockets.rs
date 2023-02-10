@@ -76,8 +76,8 @@ impl Sockets {
     }
 
     #[must_use]
-    pub fn sockets(&self) -> impl Iterator<Item = (RawFd, &Socket)> {
-        self.sockets.iter().map(|(fd, socket)| (*fd, socket))
+    pub fn sockets(&self) -> &HashMap<RawFd, Socket> {
+        &self.sockets
     }
 
     pub fn send_payload(&mut self, fd: RawFd, seq: Seq16) {
