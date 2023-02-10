@@ -4,13 +4,16 @@ use seq::Seq16;
 
 use super::{RttStopwatch, SendQueue};
 
-pub struct TimedSendQueue {
-    rtt_stopwatches: BTreeMap<Seq16, RttStopwatch2>,
+pub struct TimedSendQueue<K> {
+    rtt_stopwatches: BTreeMap<Seq16, KeyedRttStopwatch<K>>,
     /// Packets that have been sent but not yet acknowledged
     send_queue: SendQueue,
 }
 
-impl TimedSendQueue {
+impl<K> TimedSendQueue<K>
+where
+    K: PartialEq,
+{
     #[must_use]
     pub fn new(capacity: usize) -> Self {
         Self {
@@ -24,6 +27,7 @@ impl TimedSendQueue {
         seq: Seq16,
         now: time::Instant,
         timeout: time::Duration,
+        key: K,
     ) -> Result<(), RetransmitError> {
         // Cancel the rtt stopwatch
         let old_stopwatch = self.rtt_stopwatches.remove(&seq);
@@ -34,9 +38,9 @@ impl TimedSendQueue {
         // Start a new rtt stopwatch
         self.rtt_stopwatches.insert(
             seq,
-            RttStopwatch2 {
+            KeyedRttStopwatch {
                 stopwatch: RttStopwatch::new(now, timeout),
-                invalidate_rtt: true,
+                key,
             },
         );
 
@@ -61,35 +65,35 @@ impl TimedSendQueue {
         sequences
     }
 
-    pub fn send(&mut self, now: time::Instant, timeout: time::Duration) -> Option<Seq16> {
+    pub fn send(&mut self, now: time::Instant, timeout: time::Duration, key: K) -> Option<Seq16> {
         let Some(seq) = self.send_queue.send() else {
             return None;
         };
         self.rtt_stopwatches.insert(
             seq,
-            RttStopwatch2 {
+            KeyedRttStopwatch {
                 stopwatch: RttStopwatch::new(now, timeout),
-                invalidate_rtt: false,
+                key,
             },
         );
         Some(seq)
     }
 
-    pub fn ack(&mut self, seq: Seq16, now: time::Instant) -> Option<time::Duration> {
+    pub fn ack(&mut self, seq: Seq16, now: time::Instant, key: K) -> Option<time::Duration> {
         self.send_queue.ack(seq);
         let Some(rtt_stopwatch) = self.rtt_stopwatches.remove(&seq) else {
             return None;
         };
-        match rtt_stopwatch.invalidate_rtt {
-            true => None,
-            false => Some(rtt_stopwatch.stopwatch.into_rtt(now)),
+        match rtt_stopwatch.key == key {
+            true => Some(rtt_stopwatch.stopwatch.into_rtt(now)),
+            false => None,
         }
     }
 }
 
-struct RttStopwatch2 {
+struct KeyedRttStopwatch<K> {
     stopwatch: RttStopwatch,
-    invalidate_rtt: bool,
+    key: K,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -106,21 +110,23 @@ mod tests {
         let mut queue = TimedSendQueue::new(10);
         let now = time::Instant::now();
         let timeout = time::Duration::from_millis(100);
+        let key_0 = 0;
+        let key_1 = 1;
         assert_eq!(
-            queue.retransmit(Seq16::new(0), now, timeout),
+            queue.retransmit(Seq16::new(0), now, timeout, key_1),
             Err(RetransmitError::SequenceNumberNotFound)
         );
-        assert_eq!(queue.send(now, timeout), Some(Seq16::new(0)));
-        assert_eq!(queue.retransmit(Seq16::new(0), now, timeout), Ok(()));
+        assert_eq!(queue.send(now, timeout, key_0), Some(Seq16::new(0)));
+        assert_eq!(queue.retransmit(Seq16::new(0), now, timeout, key_1), Ok(()));
         assert_eq!(
-            queue.retransmit(Seq16::new(1), now, timeout),
+            queue.retransmit(Seq16::new(1), now, timeout, key_1),
             Err(RetransmitError::SequenceNumberNotFound)
         );
         let now = now + timeout;
         assert_eq!(queue.collect_timeout_sequences(now), vec![Seq16::new(0)]);
-        assert_eq!(queue.ack(Seq16::new(0), now), None);
+        assert_eq!(queue.ack(Seq16::new(0), now, key_0), None);
         assert_eq!(
-            queue.retransmit(Seq16::new(0), now, timeout),
+            queue.retransmit(Seq16::new(0), now, timeout, key_1),
             Err(RetransmitError::SequenceNumberNotFound)
         );
     }
@@ -130,9 +136,10 @@ mod tests {
         let mut queue = TimedSendQueue::new(10);
         let now = time::Instant::now();
         let timeout = time::Duration::from_millis(100);
-        assert_eq!(queue.send(now, timeout), Some(Seq16::new(0)));
+        let key_0 = 0;
+        assert_eq!(queue.send(now, timeout, key_0), Some(Seq16::new(0)));
         let rtt = time::Duration::from_millis(50);
         let now = now + rtt;
-        assert_eq!(queue.ack(Seq16::new(0), now), Some(rtt));
+        assert_eq!(queue.ack(Seq16::new(0), now, key_0), Some(rtt));
     }
 }
