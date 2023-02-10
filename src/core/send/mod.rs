@@ -51,6 +51,38 @@ impl Send {
 
     #[must_use]
     pub fn send(&mut self, now: time::Instant, payload_size: usize) -> Vec<SendFrame> {
+        // Assign payloads to sockets
+        let (pings, payloads) = self.assign_send(payload_size);
+
+        // Collect frames
+        let mut frames = Vec::new();
+
+        // Send pings
+        for fd in pings {
+            if let Some(seq) = self.sockets.send_ping(fd, now) {
+                frames.push(SendFrame::Ping(PingSendFrame { fd, seq }));
+            }
+        }
+
+        // Send payloads
+        for (fd, payload_size, timeout) in payloads {
+            if let Some(seq) = self.payload_queue.send(now, timeout, fd) {
+                self.sockets.send_payload(fd, seq);
+                frames.push(SendFrame::Payload(PayloadSendFrame {
+                    fd,
+                    seq,
+                    payload_size,
+                }));
+            }
+        }
+
+        frames
+    }
+
+    fn assign_send(
+        &self,
+        payload_size: usize,
+    ) -> (Vec<RawFd>, Vec<(RawFd, usize, time::Duration)>) {
         let mut payload_size_left = payload_size;
         let mut pings = Vec::new();
         let mut payloads = Vec::new();
@@ -89,29 +121,7 @@ impl Send {
         }
         assert_eq!(payload_size_left, 0);
 
-        // Collect frames
-        let mut frames = Vec::new();
-
-        // Send pings
-        for fd in pings {
-            if let Some(seq) = self.sockets.send_ping(fd, now) {
-                frames.push(SendFrame::Ping(PingSendFrame { fd, seq }));
-            }
-        }
-
-        // Send payloads
-        for (fd, payload_size, timeout) in payloads {
-            if let Some(seq) = self.payload_queue.send(now, timeout, fd) {
-                self.sockets.send_payload(fd, seq);
-                frames.push(SendFrame::Payload(PayloadSendFrame {
-                    fd,
-                    seq,
-                    payload_size,
-                }));
-            }
-        }
-
-        frames
+        (pings, payloads)
     }
 
     pub fn ack(&mut self, now: time::Instant, fd: RawFd, seq: Seq16, space: AckSpace) {
