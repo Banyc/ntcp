@@ -67,10 +67,18 @@ TCP but with a bunch of sockets and a smart scheduler.
     "Payload seq" -> "RTT stopwatch"
     "Payload seq" -> Payload
     "Payload seq" -> "Payload queue"
+    Payload -> "Payload seq"
     "RTT stopwatch" -> Timeout
+    "RTT stopwatch" -> FD
+    "RTT stopwatch" -> "Payload seq"
+    Timeout -> "RTT stopwatch"
     FD -> RTT
     FD -> Weight
     FD -> "Ping queue"
+    FD -> Credit
+    RTT -> FD
+    Weight -> FD
+    Credit -> FD
     "Ping seq" -> FD
     "Ping seq" -> "Ping queue"
     "Ping queue" -> FD
