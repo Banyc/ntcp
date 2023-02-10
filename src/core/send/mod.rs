@@ -1,6 +1,7 @@
 mod rtt_stopwatch;
 mod scheduler;
 mod send_queue;
+mod sockets;
 mod timed_send_queue;
 
 
