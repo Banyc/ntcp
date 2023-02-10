@@ -16,7 +16,7 @@ use self::sockets::{Credit, ReassignPayloadError, RetransmitPayloads, Sockets};
 
 pub struct Send {
     sockets: Sockets,
-    scheduler: Scheduler,
+    scheduler: Scheduler<RawFd>,
     payload_queue: TimedSendQueue<RawFd>,
 
     default_rto: time::Duration,

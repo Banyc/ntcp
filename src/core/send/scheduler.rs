@@ -1,11 +1,14 @@
-use std::{collections::HashMap, os::fd::RawFd};
+use std::{collections::HashMap, hash::Hash};
 
-pub struct Scheduler {
-    weight_vector: HashMap<RawFd, f64>,
+pub struct Scheduler<K> {
+    weight_vector: HashMap<K, f64>,
     learning_rate: f64,
 }
 
-impl Scheduler {
+impl<K> Scheduler<K>
+where
+    K: Eq + Hash + Copy,
+{
     #[must_use]
     pub fn new_empty(learning_rate: f64) -> Self {
         Self {
@@ -15,7 +18,7 @@ impl Scheduler {
     }
 
     #[must_use]
-    pub fn new(fd_vector: impl Iterator<Item = RawFd>, learning_rate: f64) -> Self {
+    pub fn new(fd_vector: impl Iterator<Item = K>, learning_rate: f64) -> Self {
         let mut this = Self {
             weight_vector: HashMap::new(),
             learning_rate,
@@ -27,9 +30,9 @@ impl Scheduler {
         this
     }
 
-    fn init_weight(&mut self, fds: impl Iterator<Item = RawFd>) {
-        for fd in fds {
-            self.weight_vector.insert(fd, 1.0);
+    fn init_weight(&mut self, fds: impl Iterator<Item = K>) {
+        for key in fds {
+            self.weight_vector.insert(key, 1.0);
         }
         let even_weight = 1.0 / self.weight_vector.len() as f64;
         for weight in self.weight_vector.values_mut() {
@@ -38,7 +41,7 @@ impl Scheduler {
     }
 
     /// Do not include RTTs that are either infinite, NaN, or time out.
-    pub fn update(&mut self, rtt_vector: &HashMap<RawFd, f64>) {
+    pub fn update(&mut self, rtt_vector: &HashMap<K, f64>) {
         if self.weight_vector.len() == 0 {
             // Init weight vector
             self.init_weight(rtt_vector.keys().copied());
@@ -56,12 +59,12 @@ impl Scheduler {
         let mut next_weight_vector = HashMap::new();
 
         // Update weight vector
-        for (fd, rtt) in clean_rtt_vector.iter() {
+        for (key, rtt) in clean_rtt_vector.iter() {
             // Get current weight
-            let weight = self.weight(fd).unwrap();
+            let weight = self.weight(key).unwrap();
 
             // Calculate partial derivative
-            let partial_derivative = match fd == min_rtt_index {
+            let partial_derivative = match key == min_rtt_index {
                 true => -*rtt,
                 false => *rtt,
             };
@@ -75,7 +78,7 @@ impl Scheduler {
             }
 
             // Store next weight
-            next_weight_vector.insert(*fd, next_weight);
+            next_weight_vector.insert(*key, next_weight);
         }
 
         // Normalize weight vector
@@ -86,12 +89,12 @@ impl Scheduler {
     }
 
     #[must_use]
-    pub fn weight(&self, fd: &RawFd) -> Option<f64> {
+    pub fn weight(&self, key: &K) -> Option<f64> {
         if self.weight_vector.len() == 0 {
             // A valid weight vector cannot be empty
             return None;
         }
-        let weight = match self.weight_vector.get(fd) {
+        let weight = match self.weight_vector.get(key) {
             Some(weight) => *weight,
             None => 0.0, // New FD
         };
@@ -101,18 +104,24 @@ impl Scheduler {
 
 #[must_use]
 #[allow(dead_code)]
-fn normalize(vector: &HashMap<RawFd, f64>) -> HashMap<RawFd, f64> {
+fn normalize<K>(vector: &HashMap<K, f64>) -> HashMap<K, f64>
+where
+    K: Eq + Hash + Copy,
+{
     let mut normalized_vector = HashMap::new();
     let sum: f64 = vector.values().sum();
-    for (fd, weight) in vector {
-        normalized_vector.insert(*fd, *weight / sum);
+    for (key, weight) in vector {
+        normalized_vector.insert(*key, *weight / sum);
     }
     normalized_vector
 }
 
 #[must_use]
 #[allow(dead_code)]
-fn standardize(vector: &HashMap<RawFd, f64>) -> Result<HashMap<RawFd, f64>, StandardizeError> {
+fn standardize<K>(vector: &HashMap<K, f64>) -> Result<HashMap<K, f64>, StandardizeError>
+where
+    K: Eq + Hash + Copy,
+{
     if vector.len() < 2 {
         return Err(StandardizeError::TooFewSamples);
     }
@@ -126,8 +135,8 @@ fn standardize(vector: &HashMap<RawFd, f64>) -> Result<HashMap<RawFd, f64>, Stan
         return Err(StandardizeError::ZeroStdDev);
     }
     let std_dev = (sum_of_squares / (vector.len() - 1) as f64).sqrt();
-    for (fd, weight) in vector {
-        standardized_vector.insert(*fd, (*weight - mean) / std_dev);
+    for (key, weight) in vector {
+        standardized_vector.insert(*key, (*weight - mean) / std_dev);
     }
     Ok(standardized_vector)
 }
@@ -137,7 +146,7 @@ enum StandardizeError {
     TooFewSamples,
 }
 
-fn normalize_mut(vector: &mut HashMap<RawFd, f64>) {
+fn normalize_mut<K>(vector: &mut HashMap<K, f64>) {
     let sum: f64 = vector.values().sum();
     for weight in vector.values_mut() {
         *weight /= sum;
