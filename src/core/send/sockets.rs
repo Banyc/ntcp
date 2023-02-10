@@ -9,7 +9,6 @@ use seq::Seq16;
 use super::TimedSendQueue;
 
 pub struct Sockets {
-    /// Might contain dead FDs
     payload_fds: HashMap<Seq16, RawFd>,
 
     sockets: HashMap<RawFd, Socket>,
@@ -17,9 +16,16 @@ pub struct Sockets {
 
 impl Sockets {
     fn check_rep(&self) {
+        // Check payload-to-socket-to-payload consistency
         for (seq, fd) in self.payload_fds.iter() {
-            if let Some(socket) = self.sockets.get(fd) {
-                assert!(socket.payloads.contains(seq));
+            let socket = self.sockets.get(fd).unwrap();
+            assert!(socket.payloads.contains(seq));
+        }
+
+        // Check socket-to-payload-to-socket consistency
+        for (fd, socket) in self.sockets.iter() {
+            for seq in socket.payloads.iter() {
+                assert_eq!(self.payload_fds.get(seq).unwrap(), fd);
             }
         }
     }
@@ -40,14 +46,27 @@ impl Sockets {
     pub fn remove_fd(&mut self, fd: RawFd) -> Result<RetransmitPayloads, ReassignPayloadError> {
         let Some(socket) = self.sockets.remove(&fd) else {
             // Socket was already removed
+            self.check_rep();
             return Ok(Vec::new());
         };
+
+        // Remove relative payload-to-socket mappings
+        for seq in socket.payloads.iter() {
+            self.payload_fds.remove(seq);
+        }
+
         if socket.payloads.is_empty() {
             // No payloads to reassign
+            self.check_rep();
             return Ok(Vec::new());
         };
+
         if self.sockets.len() == 0 {
-            return Err(ReassignPayloadError::NoSocketsLeft);
+            // No sockets left to reassign payloads to
+            self.check_rep();
+            return Err(ReassignPayloadError::NoSocketsLeft {
+                payloads: socket.payloads.into_iter().collect(),
+            });
         };
 
         // The remaining sockets will be assigned the payloads of the removed socket
@@ -168,7 +187,9 @@ impl Sockets {
         applicable_sockets: Vec<RawFd>,
     ) -> Result<RetransmitPayloads, ReassignPayloadError> {
         if applicable_sockets.len() == 0 {
-            return Err(ReassignPayloadError::NoSocketsLeft);
+            return Err(ReassignPayloadError::NoSocketsLeft {
+                payloads: payloads.into_iter().collect(),
+            });
         };
 
         let mut assigned_payloads = Vec::new();
@@ -278,9 +299,9 @@ pub enum AckSpace {
     Ping { now: time::Instant },
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum ReassignPayloadError {
-    NoSocketsLeft,
+    NoSocketsLeft { payloads: BTreeSet<Seq16> },
 }
 
 pub type RetransmitPayloads = Vec<(RawFd, Seq16)>;

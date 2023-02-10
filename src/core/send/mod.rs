@@ -288,7 +288,14 @@ mod tests {
 
         // RTO
         let res = send.retransmit_rto_payloads(now);
-        assert_eq!(res, Err(ReassignPayloadError::NoSocketsLeft));
+        assert_eq!(
+            res,
+            Err(ReassignPayloadError::NoSocketsLeft {
+                payloads: vec![frames[0].seq, frames[1].seq, frames[2].seq]
+                    .into_iter()
+                    .collect()
+            })
+        );
 
         let ack_seq = frames[0].seq;
         let different_fd = frames[1].fd;
@@ -298,7 +305,12 @@ mod tests {
 
         // RTO
         let res = send.retransmit_rto_payloads(now);
-        assert_eq!(res, Err(ReassignPayloadError::NoSocketsLeft));
+        assert_eq!(
+            res,
+            Err(ReassignPayloadError::NoSocketsLeft {
+                payloads: vec![frames[1].seq, frames[2].seq].into_iter().collect()
+            })
+        );
     }
 
     #[test]
@@ -336,7 +348,14 @@ mod tests {
 
         // RTO
         let res = send.retransmit_rto_payloads(now);
-        assert_eq!(res, Err(ReassignPayloadError::NoSocketsLeft));
+        assert_eq!(
+            res,
+            Err(ReassignPayloadError::NoSocketsLeft {
+                payloads: vec![frames[0].seq, frames[1].seq, frames[2].seq]
+                    .into_iter()
+                    .collect()
+            })
+        );
 
         let ack_fd = frames[0].fd;
         let ack_seq = frames[0].seq;
