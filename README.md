@@ -63,12 +63,34 @@ TCP but with a bunch of sockets and a smart scheduler.
 - entity relationship diagram:
   ```dot
   digraph {
-    Seq -> FD
-    Seq -> "RTT stopwatch"
-    Seq -> Payload
-    Seq -> "Send queue"
+    "Payload seq" -> FD
+    "Payload seq" -> "RTT stopwatch"
+    "Payload seq" -> Payload
+    "Payload seq" -> "Payload queue"
     "RTT stopwatch" -> Timeout
     FD -> RTT
     FD -> Weight
+    FD -> "Ping queue"
+    "Ping seq" -> FD
+    "Ping seq" -> "Ping queue"
+    "Ping queue" -> FD
   }
   ```
+
+### FD removal
+
+- problem: the sent but not acknowledged payload from the removed FD will be lost
+- on FD removal: steps:
+  1. collect all sent but not acknowledged payload sequences to the removed FD
+  1. evenly distribute the collected payload sequences to the remaining FDs
+  1. tell application to resend the payload
+
+### RTO payload reassignment
+
+- problem: abrupt quality degradation of one connection causes head-of-line blocking of the whole stream
+- on RTO: steps:
+  1. collect all sent but not acknowledged payload sequences to the FD with RTO
+  1. mark all related FDs as bad creditors
+  1. evenly distribute the collected payload sequences to the remaining FDs that are good creditors
+- on RTT update: steps:
+  1. mark all FDs that have their RTTs updated as good creditors
