@@ -14,7 +14,7 @@ pub use timed_send_queue::*;
 
 use self::sockets::{Credit, ReassignPayloadError, RetransmitPayloads, Sockets};
 
-pub struct Send {
+pub struct Sender {
     sockets: Sockets,
     scheduler: Scheduler<RawFd>,
     payload_queue: TimedSendQueue<RawFd>,
@@ -22,7 +22,7 @@ pub struct Send {
     default_rto: time::Duration,
 }
 
-impl Send {
+impl Sender {
     #[must_use]
     pub fn new(config: SendConfig) -> Self {
         Self {
@@ -211,7 +211,7 @@ mod tests {
             default_rto: time::Duration::from_secs(1),
             learning_rate: 0.1,
         };
-        let mut send = Send::new(config);
+        let mut send = Sender::new(config);
 
         let fd1 = 1;
         let fd2 = 2;
@@ -270,7 +270,7 @@ mod tests {
             default_rto: time::Duration::from_secs(1),
             learning_rate: 0.1,
         };
-        let mut send = Send::new(config);
+        let mut send = Sender::new(config);
 
         let fd1 = 1;
         let fd2 = 2;
@@ -330,7 +330,7 @@ mod tests {
             default_rto: time::Duration::from_secs(1),
             learning_rate: 0.1,
         };
-        let mut send = Send::new(config);
+        let mut send = Sender::new(config);
 
         let fd1 = 1;
         let fd2 = 2;
@@ -391,7 +391,7 @@ mod tests {
             default_rto: time::Duration::from_secs(1),
             learning_rate: 0.1,
         };
-        let mut send = Send::new(config);
+        let mut send = Sender::new(config);
 
         let fd1 = 1;
         let fd2 = 2;
@@ -450,7 +450,7 @@ mod tests {
             default_rto: time::Duration::from_secs(1),
             learning_rate: 0.1,
         };
-        let mut send = Send::new(config);
+        let mut send = Sender::new(config);
 
         let fd1 = 1;
 

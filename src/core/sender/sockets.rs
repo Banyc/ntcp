@@ -9,6 +9,7 @@ use seq::Seq16;
 use super::TimedSendQueue;
 
 pub struct Sockets {
+    /// Payload-to-socket mappings
     payload_fds: HashMap<Seq16, RawFd>,
 
     sockets: HashMap<RawFd, Socket>,
