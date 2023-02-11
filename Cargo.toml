@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 num-traits = "0.2.15"
+rep = { git = "https://github.com/Banyc/rep.git" }
 seq = { git = "https://github.com/Banyc/seq.git" }

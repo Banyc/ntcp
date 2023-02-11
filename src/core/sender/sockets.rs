@@ -4,10 +4,12 @@ use std::{
     time,
 };
 
+use rep::*;
 use seq::Seq16;
 
 use super::TimedSendQueue;
 
+#[derive(CheckIndieFields)]
 pub struct Sockets {
     /// Payload-to-socket mappings
     payload_fds: HashMap<Seq16, RawFd>,
@@ -15,22 +17,52 @@ pub struct Sockets {
     sockets: HashMap<RawFd, Socket>,
 }
 
-impl Sockets {
-    fn check_rep(&self) {
+impl CheckFields for Sockets {
+    fn check_fields(&self, e: &mut RepErrors) {
         // Check payload-to-socket-to-payload consistency
         for (seq, fd) in self.payload_fds.iter() {
-            let socket = self.sockets.get(fd).unwrap();
-            assert!(socket.payloads.contains(seq));
+            let Some(socket) = self.sockets.get(fd) else {
+                e.add(format!(
+                    "Payload {:?} is assigned to socket {}, but socket {} does not exist",
+                    seq, fd, fd
+                ));
+                continue;
+            };
+            let true = socket.payloads.contains(seq) else {
+                e.add(format!(
+                    "Payload {:?} is assigned to socket {}, but socket {} does not have it",
+                    seq, fd, fd
+                ));
+                continue;
+            };
         }
 
         // Check socket-to-payload-to-socket consistency
         for (fd, socket) in self.sockets.iter() {
             for seq in socket.payloads.iter() {
-                assert_eq!(self.payload_fds.get(seq).unwrap(), fd);
+                let Some(payload_fd) = self.payload_fds.get(seq) else {
+                    e.add(format!(
+                        "Socket {} has payload {:?}, but payload {:?} is not assigned to any socket",
+                        fd, seq, seq
+                    ));
+                    continue;
+                };
+                let true = payload_fd == fd else {
+                    e.add(format!(
+                        "Socket {} has payload {:?}, but payload {:?} is assigned to socket {}",
+                        fd, seq, seq, payload_fd
+                    ));
+                    continue;
+                };
             }
         }
     }
+}
 
+impl CheckRep for Sockets {}
+
+#[check_rep]
+impl Sockets {
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -47,7 +79,6 @@ impl Sockets {
     pub fn remove_fd(&mut self, fd: RawFd) -> Result<RetransmitPayloads, ReassignPayloadError> {
         let Some(socket) = self.sockets.remove(&fd) else {
             // Socket was already removed
-            self.check_rep();
             return Ok(Vec::new());
         };
 
@@ -58,13 +89,11 @@ impl Sockets {
 
         if socket.payloads.is_empty() {
             // No payloads to reassign
-            self.check_rep();
             return Ok(Vec::new());
         };
 
         if self.sockets.len() == 0 {
             // No sockets left to reassign payloads to
-            self.check_rep();
             return Err(ReassignPayloadError::NoSocketsLeft {
                 payloads: socket.payloads.into_iter().collect(),
             });
@@ -74,11 +103,7 @@ impl Sockets {
         let applicable_sockets = self.sockets.keys().copied().collect();
 
         // Round-robin assign payloads to other sockets
-        let ret =
-            self.round_robin_reassign_payloads(socket.payloads.into_iter(), applicable_sockets);
-
-        self.check_rep();
-        ret
+        self.round_robin_reassign_payloads(socket.payloads.into_iter(), applicable_sockets)
     }
 
     #[must_use]
@@ -87,12 +112,9 @@ impl Sockets {
             // Socket was already removed
             return None;
         };
-        let ret = socket
+        socket
             .ping_queue
-            .send(now, time::Duration::from_secs(0), fd);
-
-        self.check_rep();
-        ret
+            .send(now, time::Duration::from_secs(0), fd)
     }
 
     #[must_use]
@@ -102,8 +124,6 @@ impl Sockets {
 
     pub fn send_payload(&mut self, fd: RawFd, seq: Seq16) {
         self.reassign_payload_seq(fd, seq);
-
-        self.check_rep();
     }
 
     pub fn ack(&mut self, receiving_fd: RawFd, seq: Seq16, space: AckSpace) {
@@ -139,8 +159,6 @@ impl Sockets {
             socket.rtt = Some(rtt);
             socket.credit = Credit::Good;
         }
-
-        self.check_rep();
     }
 
     /// Prevent the socket from being assigned with RTO payloads
@@ -148,8 +166,6 @@ impl Sockets {
         if let Some(socket) = self.socket_mut(seq) {
             socket.credit = Credit::Bad;
         }
-
-        self.check_rep();
     }
 
     #[must_use]
@@ -174,11 +190,7 @@ impl Sockets {
             })
             .collect();
 
-        let ret = self
-            .round_robin_reassign_payloads(rto_payloads.iter().map(|seq| *seq), applicable_sockets);
-
-        self.check_rep();
-        ret
+        self.round_robin_reassign_payloads(rto_payloads.iter().map(|seq| *seq), applicable_sockets)
     }
 
     #[must_use]
@@ -207,10 +219,7 @@ impl Sockets {
             self.reassign_payload_seq(*assignee, seq)
         }
 
-        let ret = Ok(assigned_payloads);
-
-        self.check_rep();
-        ret
+        Ok(assigned_payloads)
     }
 
     fn reassign_payload_seq(&mut self, assignee: RawFd, seq: Seq16) {
@@ -222,8 +231,6 @@ impl Sockets {
         if let Some(socket) = self.socket_mut(seq) {
             socket.payloads.insert(seq);
         }
-
-        self.check_rep();
     }
 
     fn remove_payload_seq(&mut self, seq: Seq16) -> Option<RawFd> {
@@ -235,7 +242,6 @@ impl Sockets {
         // Remove seq -> fd mapping
         let fd = self.payload_fds.remove(&seq);
 
-        self.check_rep();
         fd
     }
 
