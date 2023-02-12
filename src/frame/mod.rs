@@ -1,6 +1,8 @@
 mod decode;
+mod encode;
 
 pub use decode::*;
+pub use encode::*;
 use seq::Seq16;
 
 /// # Format
