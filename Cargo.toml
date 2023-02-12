@@ -6,6 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+byteorder = "1.4.3"
 num-traits = "0.2.15"
 rep = { git = "https://github.com/Banyc/rep.git" }
 seq = { git = "https://github.com/Banyc/seq.git" }
+thiserror = "1.0.38"
