@@ -49,6 +49,7 @@ impl Sender {
         res
     }
 
+    /// `payload_size` is not guaranteed to be fully sent.
     #[must_use]
     pub fn send(&mut self, now: time::Instant, payload_size: usize) -> Vec<SendFrame> {
         // Assign payloads to sockets
