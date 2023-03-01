@@ -82,6 +82,7 @@ TCP but with a bunch of sockets and a smart scheduler.
     "Ping seq" -> FD
     "Ping seq" -> "Ping queue"
     "Ping queue" -> FD
+    Event -> FD
   }
   ```
 
@@ -91,6 +92,7 @@ TCP but with a bunch of sockets and a smart scheduler.
 - on FD removal: steps:
   1. collect all sent but not acknowledged payload sequences to the removed FD
   1. evenly distribute the collected payload sequences to the remaining FDs
+     - if there is no remaining FD, it will report an error to the application
   1. tell application to resend the payload
 
 ### RTO payload reassignment
